@@ -1,7 +1,5 @@
 package com.energyauctions.french_auction_scraper.controller;
 
-
-
 import com.energyauctions.french_auction_scraper.model.Auction;
 import com.energyauctions.french_auction_scraper.repository.AuctionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,13 +23,15 @@ public class AuctionController {
     // Get all auction data with regions and technologies
     @GetMapping
     public List<Auction> getAllAuctions() {
+        // Changed from findAllWithDetails() to avoid Hibernate's MultipleBagFetchException
+        // The regions and technologies will still be available in the JSON response through lazy loading
         return auctionRepository.findAllAuctions();
     }
 
     // Get the latest auction results
     @GetMapping("/latest")
     public ResponseEntity<Auction> getLatestAuction() {
-        return auctionRepository.findLatestWithDetails()
+        return auctionRepository.findTopByOrderByAuctionDateDesc()
                 .map(auction -> ResponseEntity.ok(auction))
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -48,6 +48,8 @@ public class AuctionController {
     // Get regional data for charts
     @GetMapping("/regions")
     public ResponseEntity<Map<String, Object>> getRegionalData() {
+        // Changed from findAllWithDetails() to avoid Hibernate's MultipleBagFetchException
+        // The regions and technologies will still be available in the JSON response through lazy loading
         List<Auction> auctions = auctionRepository.findAllAuctions();
 
         if (auctions.isEmpty()) {
@@ -64,6 +66,8 @@ public class AuctionController {
     // Get technology breakdown data
     @GetMapping("/technologies")
     public ResponseEntity<Map<String, Object>> getTechnologyData() {
+        // Changed from findAllWithDetails() to avoid Hibernate's MultipleBagFetchException
+        // The regions and technologies will still be available in the JSON response through lazy loading
         List<Auction> auctions = auctionRepository.findAllAuctions();
 
         if (auctions.isEmpty()) {
@@ -92,15 +96,14 @@ public class AuctionController {
                 stats.put("latestAuctionDate", latest.getAuctionDate());
                 stats.put("latestProductionMonth", latest.getProductionMonth());
 
-                // Load the latest with details to get counts
-                Auction latestWithDetails = auctionRepository.findLatestWithDetails().orElse(null);
-                if (latestWithDetails != null) {
-                    if (latestWithDetails.getRegions() != null) {
-                        stats.put("regionsCount", latestWithDetails.getRegions().size());
-                    }
-                    if (latestWithDetails.getTechnologies() != null) {
-                        stats.put("technologiesCount", latestWithDetails.getTechnologies().size());
-                    }
+                // Changed from findLatestWithDetails() to simple findTop method
+                // This prevents the MultipleBagFetchException when loading related collections
+                // The regions and technologies will be loaded when accessed due to lazy loading
+                if (latest.getRegions() != null) {
+                    stats.put("regionsCount", latest.getRegions().size());
+                }
+                if (latest.getTechnologies() != null) {
+                    stats.put("technologiesCount", latest.getTechnologies().size());
                 }
             }
         }
