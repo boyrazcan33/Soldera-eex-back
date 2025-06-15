@@ -22,12 +22,8 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     // Get auctions in date range
     List<Auction> findByAuctionDateBetweenOrderByAuctionDateDesc(LocalDate startDate, LocalDate endDate);
 
-    // Get all auctions with their regions and technologies loaded (avoids N+1 query problem)
-    @Query("SELECT DISTINCT a FROM Auction a " +
-            "LEFT JOIN FETCH a.regions " +
-            "LEFT JOIN FETCH a.technologies " +
-            "ORDER BY a.auctionDate DESC")
-    List<Auction> findAllWithDetails();
+    @Query("SELECT a FROM Auction a ORDER BY a.auctionDate DESC")
+    List<Auction> findAllAuctions();
 
     // Get latest auction with all details
     @Query("SELECT a FROM Auction a " +

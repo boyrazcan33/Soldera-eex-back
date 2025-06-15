@@ -12,7 +12,7 @@ public class AuctionTechnology {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     // Each technology record belongs to one auction
     @ManyToOne(fetch = FetchType.LAZY)
@@ -47,11 +47,11 @@ public class AuctionTechnology {
     }
 
     // Getters and setters
-    public Long getId() {
+    public Integer getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(Integer id) {
         this.id = id;
     }
 

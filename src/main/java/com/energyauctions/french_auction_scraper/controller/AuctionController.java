@@ -25,7 +25,7 @@ public class AuctionController {
     // Get all auction data with regions and technologies
     @GetMapping
     public List<Auction> getAllAuctions() {
-        return auctionRepository.findAllWithDetails();
+        return auctionRepository.findAllAuctions();
     }
 
     // Get the latest auction results
@@ -48,7 +48,7 @@ public class AuctionController {
     // Get regional data for charts
     @GetMapping("/regions")
     public ResponseEntity<Map<String, Object>> getRegionalData() {
-        List<Auction> auctions = auctionRepository.findAllWithDetails();
+        List<Auction> auctions = auctionRepository.findAllAuctions();
 
         if (auctions.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -64,7 +64,7 @@ public class AuctionController {
     // Get technology breakdown data
     @GetMapping("/technologies")
     public ResponseEntity<Map<String, Object>> getTechnologyData() {
-        List<Auction> auctions = auctionRepository.findAllWithDetails();
+        List<Auction> auctions = auctionRepository.findAllAuctions();
 
         if (auctions.isEmpty()) {
             return ResponseEntity.notFound().build();
