@@ -2,6 +2,7 @@ package com.energyauctions.french_auction_scraper.controller;
 
 import com.energyauctions.french_auction_scraper.model.Auction;
 import com.energyauctions.french_auction_scraper.repository.AuctionRepository;
+import com.energyauctions.french_auction_scraper.service.EEXAuctionScraperService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,9 @@ public class AuctionController {
 
     @Autowired
     private AuctionRepository auctionRepository;
+
+    @Autowired
+    private EEXAuctionScraperService scraperService;
 
     // Get all auction data with regions and technologies
     @GetMapping
@@ -109,6 +113,27 @@ public class AuctionController {
         }
 
         return ResponseEntity.ok(stats);
+    }
+
+    // Manual trigger for scraping - for testing and immediate updates
+    @PostMapping("/scrape")
+    public ResponseEntity<Map<String, String>> triggerScraping() {
+        try {
+            scraperService.scrapeNow();
+
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "Scraping completed successfully");
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, String> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "Scraping failed: " + e.getMessage());
+
+            return ResponseEntity.internalServerError().body(response);
+        }
     }
 
     // Simple health check

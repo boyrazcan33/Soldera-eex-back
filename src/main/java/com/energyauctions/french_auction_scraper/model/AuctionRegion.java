@@ -1,5 +1,7 @@
 package com.energyauctions.french_auction_scraper.model;
 
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,6 +17,7 @@ public class AuctionRegion {
     // Each region belongs to one auction
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "auction_id", nullable = false)
+    @JsonIgnore
     private Auction auction;
 
     @Column(name = "region_name", nullable = false)
