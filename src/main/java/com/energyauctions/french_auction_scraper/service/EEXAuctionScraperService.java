@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -62,14 +61,16 @@ public class EEXAuctionScraperService {
 
         logger.info("Successfully connected to EEX website");
 
-        // Look for auction results section
-        Element resultsSection = findResultsSection(doc);
+        // Find the Results section
+        Element resultsSection = doc.selectFirst("div.col-xl-8.offset-xl-2:has(h2:contains(Results))");
         if (resultsSection == null) {
-            logger.warn("Could not find auction results section on EEX page");
+            logger.warn("Could not find Results section on EEX page");
             return;
         }
 
-        // Extract auction metadata (date and production month)
+        logger.info("Found Results section");
+
+        // Extract auction metadata
         AuctionMetadata metadata = extractAuctionMetadata(resultsSection);
         if (metadata == null) {
             logger.warn("Could not extract auction metadata");
@@ -89,11 +90,11 @@ public class EEXAuctionScraperService {
         // Create new auction record
         Auction auction = new Auction(metadata.auctionDate, metadata.productionMonth, metadata.reservePrice);
 
-        // Extract regional data
+        // Extract regional data from the first table
         List<AuctionRegion> regions = extractRegionalData(resultsSection, auction);
         auction.setRegions(regions);
 
-        // Extract technology data
+        // Extract technology data from the second table
         List<AuctionTechnology> technologies = extractTechnologyData(resultsSection, auction);
         auction.setTechnologies(technologies);
 
@@ -107,52 +108,34 @@ public class EEXAuctionScraperService {
         }
     }
 
-    private Element findResultsSection(Document doc) {
-        // Look for the results section - try multiple selectors
-        Element results = doc.selectFirst("div:contains(Results)");
-        if (results == null) {
-            results = doc.selectFirst("section:contains(February 2025)");
-        }
-        if (results == null) {
-            // Look for tables that might contain auction data
-            Elements tables = doc.select("table");
-            for (Element table : tables) {
-                if (table.text().contains("Region") && table.text().contains("Volume") && table.text().contains("Price")) {
-                    return table.parent();
-                }
-            }
-        }
-        return results;
-    }
-
     private AuctionMetadata extractAuctionMetadata(Element resultsSection) {
         AuctionMetadata metadata = new AuctionMetadata();
 
-        // Look for date patterns in the text
-        String sectionText = resultsSection.text();
-
-        // Extract month/year pattern like "February 2025"
-        Pattern monthPattern = Pattern.compile("(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(\\d{4})");
-        Matcher monthMatcher = monthPattern.matcher(sectionText);
-
-        if (monthMatcher.find()) {
-            metadata.productionMonth = monthMatcher.group(1) + " " + monthMatcher.group(2);
+        // Extract production month from table header "February 2025"
+        Element monthHeader = resultsSection.selectFirst("th[colspan=4]");
+        if (monthHeader != null) {
+            metadata.productionMonth = monthHeader.text().trim();
+            logger.info("Found production month: {}", metadata.productionMonth);
         } else {
             metadata.productionMonth = "Unknown";
+            logger.warn("Could not find production month");
         }
 
         // Set auction date to current date (when results are published)
         metadata.auctionDate = LocalDate.now();
 
-        // Look for reserve price
+        // Extract reserve price from text like "The reserve price for the May auctions is: 0,15 €/MWh"
+        String sectionText = resultsSection.text();
         Pattern pricePattern = Pattern.compile("reserve price.*?(\\d+[.,]\\d+).*?€/MWh", Pattern.CASE_INSENSITIVE);
         Matcher priceMatcher = pricePattern.matcher(sectionText);
 
         if (priceMatcher.find()) {
             String priceStr = priceMatcher.group(1).replace(",", ".");
             metadata.reservePrice = new BigDecimal(priceStr);
+            logger.info("Found reserve price: {}", metadata.reservePrice);
         } else {
-            metadata.reservePrice = BigDecimal.valueOf(0.15); // Default reserve price
+            metadata.reservePrice = BigDecimal.valueOf(0.15);
+            logger.warn("Could not find reserve price, using default: 0.15");
         }
 
         logger.info("Extracted metadata: auction={}, production={}, reserve={}",
@@ -164,14 +147,30 @@ public class EEXAuctionScraperService {
     private List<AuctionRegion> extractRegionalData(Element resultsSection, Auction auction) {
         List<AuctionRegion> regions = new ArrayList<>();
 
-        // Look for the regional data table
-        Element regionalTable = findTableByHeaders(resultsSection, "Region", "Volume");
+        // Find the first table (regional data) - it has headers with <p> tags
+        Elements tables = resultsSection.select("table");
+        Element regionalTable = null;
+
+        for (Element table : tables) {
+            // Check if this table has Region header with <p> tag
+            if (table.select("p:contains(Region)").size() > 0) {
+                regionalTable = table;
+                break;
+            }
+        }
+
         if (regionalTable == null) {
             logger.warn("Could not find regional data table");
             return regions;
         }
 
-        Elements dataRows = regionalTable.select("tbody tr");
+        logger.info("Found regional data table");
+
+        // Get all data rows (skip header rows)
+        Elements dataRows = regionalTable.select("tr:has(td)");
+        // Filter out header rows by checking if first cell contains "Region"
+        dataRows = dataRows.select("tr:not(:has(p:contains(Region))):not(:has(td:contains(Volume Offered)))");
+
         logger.info("Found {} regional data rows", dataRows.size());
 
         for (Element row : dataRows) {
@@ -179,10 +178,10 @@ public class EEXAuctionScraperService {
             if (cells.size() < 4) continue;
 
             try {
-                String regionName = cleanText(cells.get(0).text());
-                Integer volumeOffered = parseVolume(cells.get(1).text());
-                Integer volumeAllocated = parseVolume(cells.get(2).text());
-                BigDecimal avgPrice = parsePrice(cells.get(3).text());
+                String regionName = extractCellText(cells.get(0));
+                Integer volumeOffered = parseVolume(extractCellText(cells.get(1)));
+                Integer volumeAllocated = parseVolume(extractCellText(cells.get(2)));
+                BigDecimal avgPrice = parsePrice(extractCellText(cells.get(3)));
 
                 if (volumeOffered != null && volumeAllocated != null && avgPrice != null && !regionName.isEmpty()) {
                     AuctionRegion region = new AuctionRegion(auction, regionName, volumeOffered, volumeAllocated, avgPrice);
@@ -201,14 +200,31 @@ public class EEXAuctionScraperService {
     private List<AuctionTechnology> extractTechnologyData(Element resultsSection, Auction auction) {
         List<AuctionTechnology> technologies = new ArrayList<>();
 
-        // Look for the technology data table
-        Element technologyTable = findTableByHeaders(resultsSection, "Technology", "Volume");
+        // Find the second table (technology data) - it has "Technology" header without <p> tags
+        Elements tables = resultsSection.select("table");
+        Element technologyTable = null;
+
+        for (Element table : tables) {
+            // Check if this table has Technology header directly in td (not in <p>)
+            if (table.select("td:contains(Technology)").size() > 0 &&
+                    table.select("p:contains(Technology)").size() == 0) {
+                technologyTable = table;
+                break;
+            }
+        }
+
         if (technologyTable == null) {
             logger.warn("Could not find technology data table");
             return technologies;
         }
 
-        Elements dataRows = technologyTable.select("tbody tr");
+        logger.info("Found technology data table");
+
+        // Get all data rows (skip header rows)
+        Elements dataRows = technologyTable.select("tr:has(td)");
+        // Filter out header rows
+        dataRows = dataRows.select("tr:not(:has(td:contains(Technology))):not(:has(td:contains(Volume Offered)))");
+
         logger.info("Found {} technology data rows", dataRows.size());
 
         for (Element row : dataRows) {
@@ -216,10 +232,10 @@ public class EEXAuctionScraperService {
             if (cells.size() < 4) continue;
 
             try {
-                String technologyType = cleanText(cells.get(0).text());
-                Integer volumeOffered = parseVolume(cells.get(1).text());
-                Integer volumeAllocated = parseVolume(cells.get(2).text());
-                BigDecimal avgPrice = parsePrice(cells.get(3).text());
+                String technologyType = extractCellText(cells.get(0));
+                Integer volumeOffered = parseVolume(extractCellText(cells.get(1)));
+                Integer volumeAllocated = parseVolume(extractCellText(cells.get(2)));
+                BigDecimal avgPrice = parsePrice(extractCellText(cells.get(3)));
 
                 if (volumeOffered != null && volumeAllocated != null && avgPrice != null && !technologyType.isEmpty()) {
                     AuctionTechnology technology = new AuctionTechnology(auction, technologyType, volumeOffered, volumeAllocated, avgPrice);
@@ -235,36 +251,20 @@ public class EEXAuctionScraperService {
         return technologies;
     }
 
-    private Element findTableByHeaders(Element parent, String... headers) {
-        Elements tables = parent.select("table");
-
-        for (Element table : tables) {
-            String headerText = table.select("thead, th").text().toLowerCase();
-            boolean hasAllHeaders = true;
-
-            for (String header : headers) {
-                if (!headerText.contains(header.toLowerCase())) {
-                    hasAllHeaders = false;
-                    break;
-                }
-            }
-
-            if (hasAllHeaders) {
-                return table;
-            }
-        }
-
-        return null;
-    }
-
-    private String cleanText(String text) {
+    private String extractCellText(Element cell) {
+        // Try to get text from <p> tag first, fallback to direct text
+        Element pTag = cell.selectFirst("p");
+        String text = pTag != null ? pTag.text() : cell.text();
         return text.trim().replaceAll("\\s+", " ");
     }
 
-    // Parse volume numbers that might have commas, dots, or other formatting
+    // Parse volume numbers like "236.995" or "1.943.184"
     private Integer parseVolume(String volumeText) {
         try {
-            String cleaned = volumeText.replaceAll("[^0-9]", "");
+            // Remove all non-digits except dots
+            String cleaned = volumeText.replaceAll("[^0-9.]", "");
+            // Remove dots (thousand separators) and convert to integer
+            cleaned = cleaned.replace(".", "");
             return cleaned.isEmpty() ? null : Integer.parseInt(cleaned);
         } catch (Exception e) {
             logger.debug("Could not parse volume: {}", volumeText);
@@ -272,24 +272,19 @@ public class EEXAuctionScraperService {
         }
     }
 
-    // Parse price values that start with € symbol and may have decimal points
+    // Parse price values like "€ 0.50" or "€ 0.49"
     private BigDecimal parsePrice(String priceText) {
         try {
-            // Remove € symbol and other non-numeric characters except decimal points
-            String cleaned = priceText.replaceAll("[^0-9.,]", "");
-            // Handle both comma and dot as decimal separator
-            cleaned = cleaned.replace(",", ".");
+            // Extract number after € symbol
+            Pattern pattern = Pattern.compile("€.*?(\\d+[.,]\\d+)");
+            Matcher matcher = pattern.matcher(priceText);
 
-            // Handle case where there might be multiple dots (thousands separator)
-            int lastDotIndex = cleaned.lastIndexOf(".");
-            if (lastDotIndex > 0 && cleaned.length() - lastDotIndex <= 3) {
-                // Likely a decimal point
-                String beforeDecimal = cleaned.substring(0, lastDotIndex).replace(".", "");
-                String afterDecimal = cleaned.substring(lastDotIndex);
-                cleaned = beforeDecimal + afterDecimal;
+            if (matcher.find()) {
+                String priceStr = matcher.group(1).replace(",", ".");
+                return new BigDecimal(priceStr);
             }
 
-            return cleaned.isEmpty() ? null : new BigDecimal(cleaned);
+            return null;
         } catch (Exception e) {
             logger.debug("Could not parse price: {}", priceText);
             return null;
