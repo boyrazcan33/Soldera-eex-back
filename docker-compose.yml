@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:17
+    container_name: energy_auction_db
+    environment:
+      POSTGRES_DB: french_energy_auctions
+      POSTGRES_USER: auction_user
+      POSTGRES_PASSWORD: auction_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
