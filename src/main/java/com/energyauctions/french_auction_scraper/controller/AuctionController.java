@@ -15,7 +15,7 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/auctions")
-@CrossOrigin(origins = "http://localhost:3000") // Allow React app to connect
+@CrossOrigin(origins = {"https://energy-auction-frontend-640616451900.europe-north1.run.app", "http://localhost:3000"})
 public class AuctionController {
 
     @Autowired

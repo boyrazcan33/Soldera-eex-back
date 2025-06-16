@@ -21,5 +21,5 @@ RUN ./mvnw clean package -DskipTests
 # Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["java", "-jar", "target/french-auction-scraper-0.0.1-SNAPSHOT.jar"]
+# Run with production profile
+CMD ["java", "-Dspring.profiles.active=prod", "-jar", "target/french-auction-scraper-0.0.1-SNAPSHOT.jar"]
