@@ -35,7 +35,6 @@ public class AuctionRegion {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // Constructors
     public AuctionRegion() {}
 
     public AuctionRegion(Auction auction, String regionName, Integer volumeOffered,
@@ -47,7 +46,6 @@ public class AuctionRegion {
         this.weightedAvgPrice = weightedAvgPrice;
     }
 
-    // Getters and setters
     public Long getId() {
         return id;
     }

@@ -22,6 +22,21 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * EEX Auction Data Scraper Service
+ *
+ * This service automatically collects French energy certificate auction data from the EEX website.
+ * It runs daily at 3 PM, extracts volume and pricing information from HTML tables,
+ * and saves the data to our PostgreSQL database while preventing duplicates.
+ *
+ * Key Functions:
+ * - Scheduled daily scraping at 15:00 (3 PM)
+ * - Manual trigger capability for testing
+ * - Extracts regional and technology auction data
+ * - Handles European number formatting and currency parsing
+ * - Validates data and prevents duplicate entries
+ */
+
 @Service
 public class EEXAuctionScraperService {
 
@@ -70,7 +85,6 @@ public class EEXAuctionScraperService {
 
         logger.info("Found Results section");
 
-        // Extract auction metadata
         AuctionMetadata metadata = extractAuctionMetadata(resultsSection);
         if (metadata == null) {
             logger.warn("Could not extract auction metadata");
@@ -87,7 +101,6 @@ public class EEXAuctionScraperService {
             return;
         }
 
-        // Create new auction record
         Auction auction = new Auction(metadata.auctionDate, metadata.productionMonth, metadata.reservePrice);
 
         // Extract regional data from the first table
@@ -220,9 +233,8 @@ public class EEXAuctionScraperService {
 
         logger.info("Found technology data table");
 
-        // Get all data rows (skip header rows)
         Elements dataRows = technologyTable.select("tr:has(td)");
-        // Filter out header rows
+
         dataRows = dataRows.select("tr:not(:has(td:contains(Technology))):not(:has(td:contains(Volume Offered)))");
 
         logger.info("Found {} technology data rows", dataRows.size());

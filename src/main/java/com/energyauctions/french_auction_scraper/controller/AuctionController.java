@@ -24,7 +24,6 @@ public class AuctionController {
     @Autowired
     private EEXAuctionScraperService scraperService;
 
-    // Get all auction data with regions and technologies
     @GetMapping
     public List<Auction> getAllAuctions() {
         // Changed from findAllWithDetails() to avoid Hibernate's MultipleBagFetchException

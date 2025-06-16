@@ -36,7 +36,7 @@ public class AuctionTechnology {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // Constructors
+
     public AuctionTechnology() {}
 
     public AuctionTechnology(Auction auction, String technologyType, Integer volumeOffered,
@@ -48,7 +48,6 @@ public class AuctionTechnology {
         this.weightedAvgPrice = weightedAvgPrice;
     }
 
-    // Getters and setters
     public Integer getId() {
         return id;
     }
