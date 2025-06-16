@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -26,11 +27,11 @@ import java.util.regex.Pattern;
  * EEX Auction Data Scraper Service
  *
  * This service automatically collects French energy certificate auction data from the EEX website.
- * It runs daily at 3 PM, extracts volume and pricing information from HTML tables,
+ * It runs daily at 2 am, extracts volume and pricing information from HTML tables,
  * and saves the data to our PostgreSQL database while preventing duplicates.
  *
  * Key Functions:
- * - Scheduled daily scraping at 15:00 (3 PM)
+ * - Scheduled daily scraping at 02:00 (2 AM)
  * - Manual trigger capability for testing
  * - Extracts regional and technology auction data
  * - Handles European number formatting and currency parsing
@@ -46,8 +47,8 @@ public class EEXAuctionScraperService {
     @Autowired
     private AuctionRepository auctionRepository;
 
-    // Run every day at 3 PM to check for new auction results
-    @Scheduled(cron = "0 0 15 * * ?")
+    // Run every day at 2 AM to check for new auction results
+    @Scheduled(cron = "0 0 23 * * ?")  // 23:00 UTC = 2:00 AM EEST
     public void scrapeAuctionData() {
         logger.info("Starting EEX auction data scraping...");
 
