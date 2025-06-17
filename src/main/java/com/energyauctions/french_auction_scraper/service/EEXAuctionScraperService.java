@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -27,28 +26,36 @@ import java.util.regex.Pattern;
  * EEX Auction Data Scraper Service
  *
  * This service automatically collects French energy certificate auction data from the EEX website.
- * It runs daily at 2 am, extracts volume and pricing information from HTML tables,
+ * It runs daily at 3:00 AM Estonian time, extracts volume and pricing information from HTML tables,
  * and saves the data to our PostgreSQL database while preventing duplicates.
  *
  * Key Functions:
- * - Scheduled daily scraping at 02:00 (2 AM)
+ * - Scheduled scraping daily at 3:00 AM Estonian time
  * - Manual trigger capability for testing
  * - Extracts regional and technology auction data
  * - Handles European number formatting and currency parsing
  * - Validates data and prevents duplicate entries
+ * - 5 retry attempts with exponential backoff (30s, 60s, 120s, 240s)
+ * - 75-second timeout for better reliability
+ * - Graceful failure handling ,continues on next scheduled run
  */
-
 @Service
 public class EEXAuctionScraperService {
 
     private static final Logger logger = LoggerFactory.getLogger(EEXAuctionScraperService.class);
+
     private static final String EEX_URL = "https://www.eex.com/en/markets/energy-certificates/french-auctions-power";
+
+    // Configuration for retry logic with exponential backoff
+    private static final int MAX_RETRIES = 5;
+    private static final int BASE_RETRY_DELAY_MS = 30000; // 30 seconds base delay
+    private static final int TIMEOUT_MS = 75000; // 75 seconds
 
     @Autowired
     private AuctionRepository auctionRepository;
 
-    // Run every day at 2 AM to check for new auction results
-    @Scheduled(cron = "0 0 23 * * ?")  // 23:00 UTC = 2:00 AM EEST
+    // Scheduled , runs daily at 3:00 AM Estonian time
+    @Scheduled(cron = "0 0 3 * * ?", zone = "Europe/Tallinn")
     public void scrapeAuctionData() {
         logger.info("Starting EEX auction data scraping...");
 
@@ -58,24 +65,56 @@ public class EEXAuctionScraperService {
 
         } catch (Exception e) {
             logger.error("Failed to scrape EEX auction data: {}", e.getMessage(), e);
+            // Don't crash the scheduler , let it try again in next cycle
         }
     }
 
-    // Manual trigger for testing
+    // Manual trigger method for ondemand scraping TESTING ACTUALLY
     public void scrapeNow() {
         logger.info("Manual scraping triggered");
         scrapeAuctionData();
     }
 
     private void scrapeLatestAuctionResults() throws Exception {
-        // Connect to EEX website with proper headers
-        Document doc = Jsoup.connect(EEX_URL)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                .timeout(15000)
-                .followRedirects(true)
-                .get();
+        Document doc = null;
 
-        logger.info("Successfully connected to EEX website");
+        // Retry logic with exponential backoff for network reliability
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                logger.info("Attempting to connect to EEX website (attempt {} of {})", attempt, MAX_RETRIES);
+
+                // Connect to EEX website with increased timeout and retry logic cos for 12 secs it crushes
+                doc = Jsoup.connect(EEX_URL)
+                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        .timeout(TIMEOUT_MS)
+                        .followRedirects(true)
+                        .get();
+
+                logger.info("Successfully connected to EEX website on attempt {}", attempt);
+                break;
+
+            } catch (Exception e) {
+                logger.warn("Connection attempt {} failed: {}", attempt, e.getMessage());
+
+                if (attempt == MAX_RETRIES) {
+                    logger.error("All {} connection attempts failed. Will try again in next scheduled run.", MAX_RETRIES);
+                    // Don't throw exception , let it try again in next scheduled cycle
+                    return;
+                }
+
+                // Exponential backoff: 30s, 60s, 120s, 240s
+                int delay = BASE_RETRY_DELAY_MS * (int) Math.pow(2, attempt - 1);
+                logger.info("Waiting {} seconds before retry attempt {}...", delay / 1000, attempt + 1);
+
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Retry sleep interrupted");
+                    return;
+                }
+            }
+        }
 
         // Find the Results section
         Element resultsSection = doc.selectFirst("div.col-xl-8.offset-xl-2:has(h2:contains(Results))");
@@ -86,6 +125,7 @@ public class EEXAuctionScraperService {
 
         logger.info("Found Results section");
 
+        // Extract auction metadata
         AuctionMetadata metadata = extractAuctionMetadata(resultsSection);
         if (metadata == null) {
             logger.warn("Could not extract auction metadata");
@@ -102,6 +142,7 @@ public class EEXAuctionScraperService {
             return;
         }
 
+        // Create new auction record
         Auction auction = new Auction(metadata.auctionDate, metadata.productionMonth, metadata.reservePrice);
 
         // Extract regional data from the first table
@@ -234,8 +275,9 @@ public class EEXAuctionScraperService {
 
         logger.info("Found technology data table");
 
+        // Get all data rows (skip header rows)
         Elements dataRows = technologyTable.select("tr:has(td)");
-
+        // Filter out header rows
         dataRows = dataRows.select("tr:not(:has(td:contains(Technology))):not(:has(td:contains(Volume Offered)))");
 
         logger.info("Found {} technology data rows", dataRows.size());

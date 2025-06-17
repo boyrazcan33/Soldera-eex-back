@@ -41,9 +41,9 @@ cd backend
 docker-compose up -d
 
 # Set environment variables
-export DB_USERNAME=auction_user
-export DB_PASSWORD=auction_pass
-export DB_URL=jdbc:postgresql://localhost:5435/french_energy_auctions
+export DB_USERNAME=
+export DB_PASSWORD=
+export DB_URL=jdbc:
 
 # Run application
 ./mvnw spring-boot:run
@@ -75,9 +75,9 @@ Visit `http://localhost:3000` to view the dashboard.
 
 **Backend:**
 ```env
-DB_USERNAME=auction_user
-DB_PASSWORD=auction_pass
-DB_URL=jdbc:postgresql://localhost:5435/french_energy_auctions
+DB_USERNAME=
+DB_PASSWORD=
+DB_URL=jdbc:
 ```
 
 **Frontend:**
