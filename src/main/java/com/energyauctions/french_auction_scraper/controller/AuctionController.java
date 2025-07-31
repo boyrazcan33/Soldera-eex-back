@@ -15,7 +15,7 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/auctions")
-@CrossOrigin(origins = {"https://ashy-plant-0fa8c7903.1.azurestaticapps.net", "http://localhost:3000"})
+@CrossOrigin(origins = {"https://energy-auction-scraper-front.vercel.app","https://energy-auction-scraper-front-fz2k40yg5-can-boyrazs-projects.vercel.app", "http://localhost:3000"})
 public class AuctionController {
 
     @Autowired
